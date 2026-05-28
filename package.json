@@ -10,6 +10,7 @@
     "format:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "prepare": "husky"
   },
   "lint-staged": {
