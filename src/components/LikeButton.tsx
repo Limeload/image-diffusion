@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { addToast } from "@/hooks/useToast";
 
 interface Props {
   postId: string;
@@ -9,27 +10,28 @@ interface Props {
 }
 
 export default function LikeButton({ postId, initialLiked, initialCount }: Props) {
-  const [liked, setLiked] = useState(initialLiked);
-  const [count, setCount] = useState(initialCount);
+  const [liked,   setLiked]   = useState(initialLiked);
+  const [count,   setCount]   = useState(initialCount);
   const [pending, setPending] = useState(false);
 
   async function toggle() {
     if (pending) return;
-    // Optimistic update
-    setLiked(l => !l);
-    setCount(c => (liked ? c - 1 : c + 1));
+    const next = !liked;
+    setLiked(next);
+    setCount(c => c + (next ? 1 : -1));
     setPending(true);
 
     try {
-      const res = await fetch(`/api/posts/${postId}/like`, { method: "POST" });
+      const res  = await fetch(`/api/posts/${postId}/like`, { method: "POST" });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setLiked(data.liked);
       setCount(data.like_count);
+      if (data.liked) addToast("Liked!", "success");
     } catch {
-      // Roll back on error
       setLiked(l => !l);
-      setCount(c => (liked ? c + 1 : c - 1));
+      setCount(c => c + (liked ? 1 : -1));
+      addToast("Couldn't update like", "error");
     } finally {
       setPending(false);
     }
@@ -40,9 +42,10 @@ export default function LikeButton({ postId, initialLiked, initialCount }: Props
       onClick={toggle}
       disabled={pending}
       aria-label={liked ? "Unlike" : "Like"}
+      aria-pressed={liked}
       className="flex items-center gap-1 text-sm transition-colors disabled:opacity-60"
     >
-      <span className={liked ? "text-red-500" : "text-gray-400 hover:text-red-400"}>
+      <span className={`inline-block transition-transform duration-150 ${liked ? "text-red-500 scale-125" : "text-gray-400 hover:text-red-400 scale-100"}`}>
         {liked ? "♥" : "♡"}
       </span>
       <span className="tabular-nums">{count}</span>
