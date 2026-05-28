@@ -18,10 +18,20 @@ image = (
     )
 )
 
-MODEL_ID = "stabilityai/sdxl-turbo"
-MODEL_DIR = "/vol/sdxl-turbo"
-SAFETY_MODEL_ID = "CompVis/stable-diffusion-safety-checker"
-SAFETY_FEATURE_EXTRACTOR_ID = "openai/clip-vit-base-patch32"
+MODELS = {
+    "sdxl-turbo": "stabilityai/sdxl-turbo",
+    "sd15":       "runwayml/stable-diffusion-v1-5",
+}
+MODEL_DIR              = "/vol/models"
+SAFETY_MODEL_ID        = "CompVis/stable-diffusion-safety-checker"
+SAFETY_FE_ID           = "openai/clip-vit-base-patch32"
+
+ASPECT_SIZES = {
+    "square":    (512, 512),
+    "landscape": (768, 512),
+    "portrait":  (512, 768),
+    "wide":      (896, 512),
+}
 
 
 @app.cls(
@@ -37,18 +47,10 @@ class ImageGenerator:
         from transformers import CLIPFeatureExtractor
         from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
 
-        AutoPipelineForText2Image.from_pretrained(
-            MODEL_ID,
-            cache_dir=MODEL_DIR,
-        )
-        CLIPFeatureExtractor.from_pretrained(
-            SAFETY_FEATURE_EXTRACTOR_ID,
-            cache_dir=MODEL_DIR,
-        )
-        StableDiffusionSafetyChecker.from_pretrained(
-            SAFETY_MODEL_ID,
-            cache_dir=MODEL_DIR,
-        )
+        for model_id in MODELS.values():
+            AutoPipelineForText2Image.from_pretrained(model_id, cache_dir=MODEL_DIR)
+        CLIPFeatureExtractor.from_pretrained(SAFETY_FE_ID, cache_dir=MODEL_DIR)
+        StableDiffusionSafetyChecker.from_pretrained(SAFETY_MODEL_ID, cache_dir=MODEL_DIR)
         model_volume.commit()
 
     @modal.enter()
@@ -58,50 +60,60 @@ class ImageGenerator:
         from transformers import CLIPFeatureExtractor
         from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
 
-        self.pipe = AutoPipelineForText2Image.from_pretrained(
-            MODEL_ID,
-            torch_dtype=torch.float16,
-            variant="fp16",
-            cache_dir=MODEL_DIR,
-        ).to("cuda")
+        # Pre-load both pipelines
+        self.pipes = {
+            key: AutoPipelineForText2Image.from_pretrained(
+                model_id,
+                torch_dtype=torch.float16,
+                variant="fp16" if key == "sdxl-turbo" else None,
+                cache_dir=MODEL_DIR,
+            ).to("cuda")
+            for key, model_id in MODELS.items()
+        }
 
-        self.feature_extractor = CLIPFeatureExtractor.from_pretrained(
-            SAFETY_FEATURE_EXTRACTOR_ID,
-            cache_dir=MODEL_DIR,
-        )
+        self.feature_extractor = CLIPFeatureExtractor.from_pretrained(SAFETY_FE_ID, cache_dir=MODEL_DIR)
         self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(
-            SAFETY_MODEL_ID,
-            cache_dir=MODEL_DIR,
+            SAFETY_MODEL_ID, cache_dir=MODEL_DIR
         ).to("cuda")
 
     def _check_safety(self, image):
-        import torch
-        import numpy as np
-
-        safety_input = self.feature_extractor(images=image, return_tensors="pt").to("cuda")
+        import torch, numpy as np
+        inp = self.feature_extractor(images=image, return_tensors="pt").to("cuda")
         _, has_nsfw = self.safety_checker(
             images=[np.array(image)],
-            clip_input=safety_input.pixel_values.to(torch.float16),
+            clip_input=inp.pixel_values.to(torch.float16),
         )
         return has_nsfw[0]
 
     @modal.web_endpoint(method="POST")
     def generate(self, body: dict) -> dict:
-        prompt = (body.get("prompt") or "").strip()
+        prompt  = (body.get("prompt") or "").strip()
+        model   = body.get("model", "sdxl-turbo")
+        aspect  = body.get("aspect", "square")
+
         if not prompt:
             return {"error": "prompt is required"}, 400
+        if model not in self.pipes:
+            model = "sdxl-turbo"
 
-        image = self.pipe(
+        width, height = ASPECT_SIZES.get(aspect, (512, 512))
+        steps  = 4  if model == "sdxl-turbo" else 20
+        cfg    = 0.0 if model == "sdxl-turbo" else 7.5
+
+        result = self.pipes[model](
             prompt=prompt,
-            num_inference_steps=4,
-            guidance_scale=0.0,
-        ).images[0]
+            num_inference_steps=steps,
+            guidance_scale=cfg,
+            width=width,
+            height=height,
+        )
+        gen_image = result.images[0]
 
-        if self._check_safety(image):
+        if self._check_safety(gen_image):
             return {"error": "Prompt produced unsafe content and was rejected"}, 400
 
         buf = io.BytesIO()
-        image.save(buf, format="PNG")
+        gen_image.save(buf, format="PNG")
         encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-        return {"image": encoded, "format": "png"}
+        return {"image": encoded, "format": "png", "width": width, "height": height}

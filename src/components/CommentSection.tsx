@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { addToast } from "@/hooks/useToast";
 import { BLUR_DATA_URL, MAX_COMMENT_LENGTH } from "@/lib/constants";
+import RelativeTime from "@/components/RelativeTime";
 import type { Comment } from "@/types";
 
 interface Props {
@@ -58,7 +59,7 @@ export default function CommentSection({ postId, initialComments }: Props) {
             <div className="flex flex-col gap-0.5">
               <span className="text-sm font-medium">{c.users.username}</span>
               <p className="text-sm text-gray-700 dark:text-gray-300">{c.body}</p>
-              <time className="text-xs text-gray-400">{new Date(c.created_at).toLocaleDateString()}</time>
+              <RelativeTime iso={c.created_at} className="text-xs text-gray-400" />
             </div>
           </li>
         ))}

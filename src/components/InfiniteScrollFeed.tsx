@@ -6,10 +6,11 @@ import type { Post } from "@/types";
 
 interface Props {
   initialPosts: Post[];
+  tab?: string;
 }
 
-export default function InfiniteScrollFeed({ initialPosts }: Props) {
-  const [posts, setPosts] = useState<Post[]>(initialPosts);
+export default function InfiniteScrollFeed({ initialPosts, tab = "all" }: Props) {
+  const [posts,   setPosts]   = useState<Post[]>(initialPosts);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(initialPosts.length === 10);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -17,13 +18,8 @@ export default function InfiniteScrollFeed({ initialPosts }: Props) {
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
-
     const observer = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting && hasMore && !loading) {
-          loadMore();
-        }
-      },
+      entries => { if (entries[0].isIntersecting && hasMore && !loading) loadMore(); },
       { rootMargin: "200px" }
     );
     observer.observe(el);
@@ -36,7 +32,8 @@ export default function InfiniteScrollFeed({ initialPosts }: Props) {
     if (!cursor) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/feed?cursor=${encodeURIComponent(cursor)}&limit=10`);
+      const params = new URLSearchParams({ cursor, limit: "10", tab });
+      const res = await fetch(`/api/feed?${params}`);
       const data: Post[] = await res.json();
       setPosts(prev => [...prev, ...data]);
       setHasMore(data.length === 10);
@@ -47,9 +44,11 @@ export default function InfiniteScrollFeed({ initialPosts }: Props) {
 
   if (posts.length === 0) {
     return (
-      <div className="flex items-center justify-center py-24 text-gray-400 text-sm">
-        No posts yet. Be the first to{" "}
-        <a href="/generate" className="ml-1 underline">generate one</a>!
+      <div className="flex flex-col items-center justify-center py-24 text-gray-400 text-sm gap-2">
+        {tab === "following"
+          ? <><p>No posts from people you follow yet.</p><p>Follow some users to see their posts here.</p></>
+          : <><p>No posts yet.</p><a href="/generate" className="underline">Generate the first one!</a></>
+        }
       </div>
     );
   }
@@ -69,11 +68,9 @@ export default function InfiniteScrollFeed({ initialPosts }: Props) {
           <div className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin text-gray-400" />
         </div>
       )}
-
       {!hasMore && posts.length > 0 && (
         <p className="text-center text-xs text-gray-400 py-8">You&apos;ve seen everything!</p>
       )}
-
       <div ref={sentinelRef} className="h-1" />
     </div>
   );

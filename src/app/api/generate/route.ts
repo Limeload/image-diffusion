@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import sharp from "sharp";
 import { getServiceClient } from "@/lib/supabase";
-import { getUserByClerkId, insertPost, updatePostEmbedding } from "@/lib/queries";
+import { insertPost, updatePostEmbedding } from "@/lib/queries";
 import { checkPromptSafety } from "@/lib/safety";
 import { generateRatelimit } from "@/lib/ratelimit";
+import { requireAuth } from "@/lib/auth";
 
 const VALID_MODELS  = ["sdxl-turbo", "sd15"] as const;
 const VALID_ASPECTS = ["square", "landscape", "portrait", "wide"] as const;
@@ -26,11 +26,8 @@ async function generateEmbedding(text: string): Promise<number[] | null> {
 
 export async function POST(request: Request) {
   // ── Auth ────────────────────────────────────────────────────────────────────
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-
-  const user = await getUserByClerkId(clerkId);
-  if (!user) return NextResponse.json({ success: false, error: "User not found — try signing out and back in" }, { status: 404 });
+  const { user, error: authError } = await requireAuth();
+  if (authError) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
 
   // ── Rate limit ──────────────────────────────────────────────────────────────
   const { success, reset } = await generateRatelimit.limit(user.id);
