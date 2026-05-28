@@ -10,10 +10,15 @@
     "format:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\""
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.4.2",
+    "@supabase/supabase-js": "^2.106.2",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "next": "15.1.0",
     "prettier": "^3.4.2",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "svix": "^1.94.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
