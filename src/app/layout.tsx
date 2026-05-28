@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import Toaster from "@/components/Toaster";
 import BottomNav from "@/components/BottomNav";
+import ScrollToTop from "@/components/ScrollToTop";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,6 +30,7 @@ export const metadata: Metadata = {
     title: "Pentagram",
     description: "Generate and share AI images",
   },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -43,6 +45,7 @@ export default function RootLayout({
           {children}
           <Toaster />
           <BottomNav />
+          <ScrollToTop />
         </body>
       </html>
     </ClerkProvider>
